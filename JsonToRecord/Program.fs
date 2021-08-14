@@ -42,14 +42,11 @@ let telegramRequest request = io {
     if update.Message.Type = MessageType.Text then
         match update.Message.Text with
         | "/start" -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "Bot start")
-        | x when x.StartsWith("/url") -> 
-              match parseUrlMessage x with
-              | Result.Ok(url, name) -> 
-                         match tryGetStringFromUrl url with
-                         | Some json -> do! (sendTextToChat 
-                                               (new ChatId(update.Message.Chat.Id)) (JsonModule.jsonToRecord json name))
-                         | None -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "Url don't return json")
-              | Result.Error(e) -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) e)
+        | message when message.StartsWith("/url") ->
+              match message |> parseUrlMessage |> Result.map(fun res -> tryGetStringFromUrl (res |> fst) |> Option.map(fun json -> (json, (res |> snd)) )) with
+              | Result.Ok(Some(json, name)) -> do! (sendTextToChat(new ChatId(update.Message.Chat.Id)) (JsonModule.jsonToRecord json name))
+              | Result.Ok(None) -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "Url don't return json")
+              | Result.Error(err) -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) err)
         | _ -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "?")
                  
     return OK "OK"
