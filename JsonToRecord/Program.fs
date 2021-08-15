@@ -19,35 +19,40 @@ let parseUrl (url: string) =
     with _ -> 
         None
 
-let parseUrlMessage (mes : string) = 
-    let arr = mes.Split(' ')
-    if arr.Length <> 3 then Error("Error parse message") 
-    else match parseUrl arr.[1] with
-         | Some url -> Ok(url, arr.[2])
+let parseUrlMessage (message : string) = 
+    let messageeWords = message.Split(' ')
+    if messageeWords.Length <> 3 then Error("Error parse message") 
+    else match parseUrl messageeWords.[1] with
+         | Some url -> Ok(url, messageeWords.[2])
          | None -> Error("Parse url")
 
 let tryGetStringFromUrl (url : Uri) =
     try 
         let httpClient = new System.Net.Http.HttpClient()
         let response = httpClient.GetAsync(url).Result 
-        response.Content.ReadAsStringAsync().Result |> Some
+        response.Content.ReadAsStringAsync().Result |> Ok
     with _ -> 
-        None
+        Error("Url don't return json")
 
-let sendTextToChat (id : ChatId) (mes : string) = 
-    io { client.SendTextMessageAsync(id, mes).Result |> ignore }
+let sendTextToChat (id : ChatId) (message : string) = 
+    io { client.SendTextMessageAsync(id, message).Result |> ignore }
+
+let replyToCorrectMessage (chatId : ChatId) (correctMessage : string) =
+    let result = correctMessage |> parseUrlMessage 
+                 |> Result.bind(fun (url, name) -> tryGetStringFromUrl url |> Result.map(fun stringBody -> (stringBody, name) ))
+    match result with
+    | Result.Ok(json, name) -> sendTextToChat chatId (JsonModule.jsonToRecord json name)
+    | Result.Error(error) -> sendTextToChat chatId error
 
 let telegramRequest request = io {
     let update = request.rawForm |> System.Text.Encoding.Default.GetString |> JsonConvert.DeserializeObject<Update>
+    let chatId = new ChatId(update.Message.Chat.Id)
+
     if update.Message.Type = MessageType.Text then
         match update.Message.Text with
-        | "/start" -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "Bot start")
-        | message when message.StartsWith("/url") ->
-              match message |> parseUrlMessage |> Result.map(fun res -> tryGetStringFromUrl (res |> fst) |> Option.map(fun json -> (json, (res |> snd)) )) with
-              | Result.Ok(Some(json, name)) -> do! (sendTextToChat(new ChatId(update.Message.Chat.Id)) (JsonModule.jsonToRecord json name))
-              | Result.Ok(None) -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "Url don't return json")
-              | Result.Error(err) -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) err)
-        | _ -> do! (sendTextToChat (new ChatId(update.Message.Chat.Id)) "?")
+        | "/start" -> do! sendTextToChat chatId "Bot start"
+        | message when message.StartsWith("/url") -> do! replyToCorrectMessage chatId message 
+        | _ -> do! sendTextToChat chatId "?"
                  
     return OK "OK"
 }
