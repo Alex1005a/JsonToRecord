@@ -11,7 +11,7 @@ open NovelFS.NovelIO
 
 
 let client = new TelegramBotClient(Environment.GetEnvironmentVariable("botToken"))
-client.SetWebhookAsync("https://fe1962dca5c2.ngrok.io/bot").Wait()
+client.SetWebhookAsync("https://fe1962dca5c2.ngrok.io/bot").Wait() // For test
 
 let parseUrl (url: string) =
     try 
